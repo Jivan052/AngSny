@@ -27,7 +27,7 @@
 
     function joinRoom() {
       roomId = document.getElementById('roomId').value;
-      ws = new WebSocket('ws://localhost:8080');
+      ws = new WebSocket('wss://angsny.onrender.com');
       ws.onopen = () => {
         console.log('WebSocket connection established');
         ws.send(JSON.stringify({ roomId, action: 'join' }));
