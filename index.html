@@ -25,7 +25,8 @@
     let player;
     let roomId;
     let lastSeekTime = 0;
-    let isSeeking = false; // Prevents infinite loop during seek updates
+    let isSeeking = false;
+    let isPlaying = false;
 
     function joinRoom() {
       roomId = document.getElementById('roomId').value.trim();
@@ -40,37 +41,41 @@
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        console.log('📩 Message received:', data);
+        console.log('📩 Received:', data);
 
         switch (data.type) {
           case 'sync':
           case 'changeUrl':
             loadVideo(data.url);
-            setTimeout(() => player.seekTo(data.time, true), 1000);
-            break;
-          case 'play':
-            player.playVideo();
-            break;
-          case 'pause':
-            player.pauseVideo();
-            break;
-          case 'seek':
-            if (Math.abs(player.getCurrentTime() - data.time) > 1) {
+            setTimeout(() => {
               isSeeking = true;
               player.seekTo(data.time, true);
-              setTimeout(() => (isSeeking = false), 500);
+              setTimeout(() => isSeeking = false, 500);
+            }, 1000);
+            break;
+          case 'play':
+            if (player.getPlayerState() !== YT.PlayerState.PLAYING) {
+              isPlaying = true;
+              player.playVideo();
+            }
+            break;
+          case 'pause':
+            if (player.getPlayerState() !== YT.PlayerState.PAUSED) {
+              player.pauseVideo();
+            }
+            break;
+          case 'seek':
+            if (!isSeeking && Math.abs(player.getCurrentTime() - data.time) > 1) {
+              isSeeking = true;
+              player.seekTo(data.time, true);
+              setTimeout(() => isSeeking = false, 500);
             }
             break;
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('⚠️ WebSocket disconnected');
-      };
+      ws.onerror = (error) => console.error('❌ WebSocket error:', error);
+      ws.onclose = () => console.log('⚠️ WebSocket disconnected');
     }
 
     function changeVideo() {
@@ -78,7 +83,6 @@
       if (!url || !url.includes("youtube.com/watch?v=")) {
         return alert("Invalid YouTube URL");
       }
-
       ws.send(JSON.stringify({ roomId, action: 'changeUrl', url }));
     }
 
@@ -115,11 +119,13 @@
 
       const currentTime = player.getCurrentTime();
 
-      if (event.data === YT.PlayerState.PLAYING) {
+      if (event.data === YT.PlayerState.PLAYING && !isSeeking) {
         console.log("▶️ Video Played");
+        isPlaying = true;
         ws.send(JSON.stringify({ roomId, action: 'play', time: currentTime }));
       } else if (event.data === YT.PlayerState.PAUSED) {
         console.log("⏸ Video Paused");
+        isPlaying = false;
         ws.send(JSON.stringify({ roomId, action: 'pause', time: currentTime }));
       }
     }
@@ -133,7 +139,7 @@
           ws.send(JSON.stringify({ roomId, action: 'seek', time: currentTime }));
         }
       }
-    }, 1500);
+    }, 2000);
   </script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </body>
