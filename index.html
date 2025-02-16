@@ -24,52 +24,72 @@
     let ws;
     let player;
     let roomId;
+    let lastSeekTime = 0; // To prevent excessive seek updates
 
     function joinRoom() {
-      roomId = document.getElementById('roomId').value;
+      roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) return alert("Please enter a Room ID");
+
       ws = new WebSocket('wss://angsny.onrender.com');
+      
       ws.onopen = () => {
         console.log('WebSocket connection established');
         ws.send(JSON.stringify({ roomId, action: 'join' }));
       };
+      
       ws.onmessage = (event) => {
         console.log('Message received:', event.data);
         const data = JSON.parse(event.data);
-        if (data.type === 'sync') {
-          loadVideo(data.url);
-          player.seekTo(data.time, true);
-        } else if (data.type === 'play') {
-          player.playVideo();
-        } else if (data.type === 'pause') {
-          player.pauseVideo();
-        } else if (data.type === 'seek') {
-          player.seekTo(data.time, true);
-        } else if (data.type === 'changeUrl') {
-          loadVideo(data.url);
-          player.seekTo(data.time, true);
+        
+        switch (data.type) {
+          case 'sync':
+          case 'changeUrl':
+            loadVideo(data.url);
+            setTimeout(() => player.seekTo(data.time, true), 1000);
+            break;
+          case 'play':
+            player.playVideo();
+            break;
+          case 'pause':
+            player.pauseVideo();
+            break;
+          case 'seek':
+            if (Math.abs(player.getCurrentTime() - data.time) > 1) {
+              player.seekTo(data.time, true);
+            }
+            break;
         }
       };
+
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
       };
+
       ws.onclose = () => {
         console.log('WebSocket connection closed');
       };
     }
 
     function changeVideo() {
-      const url = document.getElementById('videoUrl').value;
+      const url = document.getElementById('videoUrl').value.trim();
+      if (!url || !url.includes("youtube.com/watch?v=")) {
+        return alert("Invalid YouTube URL");
+      }
+
       ws.send(JSON.stringify({ roomId, action: 'changeUrl', url }));
     }
 
     function loadVideo(url) {
+      const videoId = extractVideoId(url);
+      if (!videoId) return alert("Invalid YouTube URL");
+
       if (player) {
-        player.loadVideoById(url.split('v=')[1]);
+        player.loadVideoById(videoId);
       } else {
         player = new YT.Player('player', {
           height: '100%',
           width: '100%',
-          videoId: url.split('v=')[1],
+          videoId: videoId,
           events: {
             'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange
@@ -78,23 +98,37 @@
       }
     }
 
+    function extractVideoId(url) {
+      const match = url.match(/[?&]v=([^&]+)/);
+      return match ? match[1] : null;
+    }
+
     function onPlayerReady(event) {
       event.target.playVideo();
     }
 
     function onPlayerStateChange(event) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+      const currentTime = player.getCurrentTime();
+
       if (event.data === YT.PlayerState.PLAYING) {
-        ws.send(JSON.stringify({ roomId, action: 'play', time: player.getCurrentTime() }));
+        ws.send(JSON.stringify({ roomId, action: 'play', time: currentTime }));
       } else if (event.data === YT.PlayerState.PAUSED) {
-        ws.send(JSON.stringify({ roomId, action: 'pause', time: player.getCurrentTime() }));
+        ws.send(JSON.stringify({ roomId, action: 'pause', time: currentTime }));
       }
     }
 
     setInterval(() => {
-      if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
-        ws.send(JSON.stringify({ roomId, action: 'seek', time: player.getCurrentTime() }));
+      if (player && ws && ws.readyState === WebSocket.OPEN && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        const currentTime = player.getCurrentTime();
+        if (Math.abs(currentTime - lastSeekTime) > 1) {
+          lastSeekTime = currentTime;
+          ws.send(JSON.stringify({ roomId, action: 'seek', time: currentTime }));
+        }
       }
-    }, 1000);
+    }, 1500); // Send updates every 1.5 seconds
+
   </script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </body>
