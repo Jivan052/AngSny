@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Sync Room</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-white">
+  <div class="container mx-auto p-4">
+    <h1 class="text-4xl font-bold mb-4">AngSync Room</h1>
+    <div class="mb-4">
+      <input id="roomId" type="text" placeholder="Enter Room ID" class="p-2 rounded bg-gray-700">
+      <button onclick="joinRoom()" class="p-2 bg-blue-500 rounded">Join Room</button>
+    </div>
+    <div class="mb-4">
+      <input id="videoUrl" type="text" placeholder="Paste YouTube URL" class="p-2 rounded bg-gray-700">
+      <button onclick="changeVideo()" class="p-2 bg-green-500 rounded">Change Video</button>
+    </div>
+    <div id="player" class="w-full h-96"></div>
+  </div>
+
+  <script>
+    let ws;
+    let player;
+    let roomId;
+
+    function joinRoom() {
+      roomId = document.getElementById('roomId').value;
+      ws = new WebSocket('ws://localhost:8080');
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+        ws.send(JSON.stringify({ roomId, action: 'join' }));
+      };
+      ws.onmessage = (event) => {
+        console.log('Message received:', event.data);
+        const data = JSON.parse(event.data);
+        if (data.type === 'sync') {
+          loadVideo(data.url);
+          player.seekTo(data.time, true);
+        } else if (data.type === 'play') {
+          player.playVideo();
+        } else if (data.type === 'pause') {
+          player.pauseVideo();
+        } else if (data.type === 'seek') {
+          player.seekTo(data.time, true);
+        } else if (data.type === 'changeUrl') {
+          loadVideo(data.url);
+          player.seekTo(data.time, true);
+        }
+      };
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      ws.onclose = () => {
+        console.log('WebSocket connection closed');
+      };
+    }
+
+    function changeVideo() {
+      const url = document.getElementById('videoUrl').value;
+      ws.send(JSON.stringify({ roomId, action: 'changeUrl', url }));
+    }
+
+    function loadVideo(url) {
+      if (player) {
+        player.loadVideoById(url.split('v=')[1]);
+      } else {
+        player = new YT.Player('player', {
+          height: '100%',
+          width: '100%',
+          videoId: url.split('v=')[1],
+          events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+          }
+        });
+      }
+    }
+
+    function onPlayerReady(event) {
+      event.target.playVideo();
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        ws.send(JSON.stringify({ roomId, action: 'play', time: player.getCurrentTime() }));
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        ws.send(JSON.stringify({ roomId, action: 'pause', time: player.getCurrentTime() }));
+      }
+    }
+
+    setInterval(() => {
+      if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        ws.send(JSON.stringify({ roomId, action: 'seek', time: player.getCurrentTime() }));
+      }
+    }, 1000);
+  </script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
