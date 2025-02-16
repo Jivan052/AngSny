@@ -26,6 +26,7 @@
     let roomId;
     let lastSeekTime = 0;
     let isSeeking = false;
+    let isPaused = false;
     let isPlaying = false;
 
     function joinRoom() {
@@ -54,13 +55,16 @@
             }, 1000);
             break;
           case 'play':
-            if (player.getPlayerState() !== YT.PlayerState.PLAYING) {
+            if (!isPlaying) {
               isPlaying = true;
+              isPaused = false;
               player.playVideo();
             }
             break;
           case 'pause':
-            if (player.getPlayerState() !== YT.PlayerState.PAUSED) {
+            if (!isPaused) {
+              isPaused = true;
+              isPlaying = false;
               player.pauseVideo();
             }
             break;
@@ -122,10 +126,12 @@
       if (event.data === YT.PlayerState.PLAYING && !isSeeking) {
         console.log("▶️ Video Played");
         isPlaying = true;
+        isPaused = false;
         ws.send(JSON.stringify({ roomId, action: 'play', time: currentTime }));
       } else if (event.data === YT.PlayerState.PAUSED) {
         console.log("⏸ Video Paused");
         isPlaying = false;
+        isPaused = true;
         ws.send(JSON.stringify({ roomId, action: 'pause', time: currentTime }));
       }
     }
