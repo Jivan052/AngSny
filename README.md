@@ -1,6 +1,9 @@
 # 🎬 AngSync Room
 
-A real-time YouTube video synchronization app that allows multiple users to watch the same video together in sync.
+A real-time YouTube video synchronization app that allows multiple users to watch the same video together and enjoy the real sync.
+![image](https://github.com/user-attachments/assets/d15a48d0-374a-41e2-a034-2c5a25ba4f6c)
+![image](https://github.com/user-attachments/assets/5e35391b-e991-4b5b-8f91-c2f2554210ce)
+
 
 ## 🚀 Features
 ✅ Create or join a sync room with a unique **Room ID**.  
