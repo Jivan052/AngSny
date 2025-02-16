@@ -24,23 +24,24 @@
     let ws;
     let player;
     let roomId;
-    let lastSeekTime = 0; // To prevent excessive seek updates
+    let lastSeekTime = 0;
+    let isSeeking = false; // Prevents infinite loop during seek updates
 
     function joinRoom() {
       roomId = document.getElementById('roomId').value.trim();
       if (!roomId) return alert("Please enter a Room ID");
 
       ws = new WebSocket('wss://angsny.onrender.com');
-      
+
       ws.onopen = () => {
-        console.log('WebSocket connection established');
+        console.log('✅ WebSocket connected');
         ws.send(JSON.stringify({ roomId, action: 'join' }));
       };
-      
+
       ws.onmessage = (event) => {
-        console.log('Message received:', event.data);
         const data = JSON.parse(event.data);
-        
+        console.log('📩 Message received:', data);
+
         switch (data.type) {
           case 'sync':
           case 'changeUrl':
@@ -55,18 +56,20 @@
             break;
           case 'seek':
             if (Math.abs(player.getCurrentTime() - data.time) > 1) {
+              isSeeking = true;
               player.seekTo(data.time, true);
+              setTimeout(() => (isSeeking = false), 500);
             }
             break;
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('❌ WebSocket error:', error);
       };
 
       ws.onclose = () => {
-        console.log('WebSocket connection closed');
+        console.log('⚠️ WebSocket disconnected');
       };
     }
 
@@ -113,8 +116,10 @@
       const currentTime = player.getCurrentTime();
 
       if (event.data === YT.PlayerState.PLAYING) {
+        console.log("▶️ Video Played");
         ws.send(JSON.stringify({ roomId, action: 'play', time: currentTime }));
       } else if (event.data === YT.PlayerState.PAUSED) {
+        console.log("⏸ Video Paused");
         ws.send(JSON.stringify({ roomId, action: 'pause', time: currentTime }));
       }
     }
@@ -122,13 +127,13 @@
     setInterval(() => {
       if (player && ws && ws.readyState === WebSocket.OPEN && player.getPlayerState() === YT.PlayerState.PLAYING) {
         const currentTime = player.getCurrentTime();
-        if (Math.abs(currentTime - lastSeekTime) > 1) {
+        if (!isSeeking && Math.abs(currentTime - lastSeekTime) > 1) {
           lastSeekTime = currentTime;
+          console.log("⏩ Seeking to:", currentTime);
           ws.send(JSON.stringify({ roomId, action: 'seek', time: currentTime }));
         }
       }
-    }, 1500); // Send updates every 1.5 seconds
-
+    }, 1500);
   </script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </body>
